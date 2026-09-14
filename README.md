@@ -21,7 +21,7 @@ correlation — not idealized textbook data.
 |---|---|
 | Purged walk-forward with embargo | done |
 | IC / Rank IC | done |
-| PSR / DSR (k=15 multiple-testing correction) | not started |
+| PSR / DSR (k=15 multiple-testing correction) | done |
 | Fama-French factor neutralization | not started |
 | Rolling IC / decay curve | not started |
 
@@ -97,6 +97,42 @@ Run the real-data demo:
 
 ```bash
 python scripts/demo_information_coefficient.py
+```
+
+## PSR / DSR
+
+`src/quant_toolkit/metrics/psr_dsr.py`
+
+A Sharpe ratio computed on a finite sample is a point estimate, not a
+certainty. The **Probabilistic Sharpe Ratio (PSR)** turns that into a
+number: the probability that the *true* Sharpe ratio exceeds a chosen
+benchmark, given the sample size and the shape (skewness, kurtosis) of the
+return distribution — the same-looking Sharpe is far more believable after
+1,000 observations than after 10.
+
+The **Deflated Sharpe Ratio (DSR)** corrects for a different problem: if
+this result is the best of *N* things tried, some of "best" is just *N*
+chances for luck to show up somewhere. DSR raises PSR's benchmark to the
+Sharpe ratio the best of *N* pure-noise trials would be expected to produce
+by chance alone (an extreme-value approximation), then asks whether the
+actual result still clears that higher, corrected bar.
+
+Both are built from the underlying formulas (Bailey & Lopez de Prado, *The
+Sharpe Ratio Efficient Frontier*, 2012; *The Deflated Sharpe Ratio*, 2014)
+rather than a packaged library call — including the standard normal CDF
+(`math.erf`-based) and its inverse (bisection), not `scipy.stats.norm`.
+
+```python
+from quant_toolkit.metrics import deflated_sharpe_ratio, probabilistic_sharpe_ratio
+
+probabilistic_sharpe_ratio(daily_returns, benchmark_sr=0.0)
+deflated_sharpe_ratio(daily_returns, n_trials=15)
+```
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_psr_dsr.py
 ```
 
 ## Data
