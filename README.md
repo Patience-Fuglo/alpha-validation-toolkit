@@ -20,7 +20,7 @@ correlation — not idealized textbook data.
 | Module | Status |
 |---|---|
 | Purged walk-forward with embargo | done |
-| IC / Rank IC | not started |
+| IC / Rank IC | done |
 | PSR / DSR (k=15 multiple-testing correction) | not started |
 | Fama-French factor neutralization | not started |
 | Rolling IC / decay curve | not started |
@@ -62,6 +62,41 @@ Run the tests:
 
 ```bash
 pytest tests/
+```
+
+## IC / Rank IC
+
+`src/quant_toolkit/metrics/ic.py`
+
+The Information Coefficient is the Pearson correlation between a signal and
+the forward return it's meant to predict; Rank IC is the same idea computed
+on each series' ranks (Spearman), so a single outlier observation can't
+dominate the score the way it can with raw values. Both are implemented
+from first principles here — no `pandas.Series.corr`, no
+`scipy.stats.pearsonr`/`spearmanr` — and the test suite cross-checks the
+results against those reference implementations independently.
+
+`rolling_ic` computes IC (or Rank IC) on each trailing window, and `icir`
+summarizes that series as mean / std — a signal with the same average IC as
+another but a much higher ICIR is the more consistent, more trustworthy one.
+
+```python
+from quant_toolkit.data import load_ohlcv
+from quant_toolkit.metrics import icir, information_coefficient, rolling_ic
+
+bars = load_ohlcv("NVDA", "2019-01-01", "2024-12-31")
+signal = bars["close"].pct_change(5)
+forward_return = bars["close"].shift(-5) / bars["close"] - 1.0
+
+information_coefficient(signal, forward_return)
+roll = rolling_ic(signal, forward_return, window=60)
+icir(roll)
+```
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_information_coefficient.py
 ```
 
 ## Data
