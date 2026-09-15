@@ -3,7 +3,13 @@ import pandas as pd
 import pytest
 from scipy import stats
 
-from quant_toolkit.metrics import icir, information_coefficient, rank_information_coefficient, rolling_ic
+from quant_toolkit.metrics import (
+    decay_curve,
+    icir,
+    information_coefficient,
+    rank_information_coefficient,
+    rolling_ic,
+)
 
 
 def series(values, index=None):
@@ -119,3 +125,65 @@ def test_icir_known_values():
 def test_icir_drops_nan_and_handles_insufficient_data():
     ic_series = series([0.1, np.nan, np.nan])
     assert np.isnan(icir(ic_series))
+
+
+def _price_path_with_one_day_signal_effect(seed=42, n=400, extra=30, kick=0.05, noise_scale=0.02):
+    """A synthetic price path where `signal[t]` only affects the return one
+    day later (r[t+1]); every subsequent day's return is independent noise.
+    Used to verify decay_curve actually detects shrinking predictive power
+    as the forward horizon grows, not just that it runs without error.
+    """
+    rng = np.random.default_rng(seed)
+    total = n + extra
+    noise = rng.normal(scale=noise_scale, size=total)
+    sig = rng.normal(size=n)
+    r = noise.copy()
+    r[1 : n + 1] += kick * sig
+    price = 100 * np.cumprod(1 + r)
+    return series(sig, index=pd.RangeIndex(n)), series(price, index=pd.RangeIndex(total))
+
+
+def test_decay_curve_index_matches_horizons_in_order():
+    sig, price = _price_path_with_one_day_signal_effect()
+    result = decay_curve(sig, price, horizons=[5, 1, 20, 10])
+    assert list(result.index) == [5, 1, 20, 10]
+
+
+def test_decay_curve_matches_manual_information_coefficient_per_horizon():
+    sig, price = _price_path_with_one_day_signal_effect()
+    result = decay_curve(sig, price, horizons=[1, 10])
+    manual_h1 = information_coefficient(sig, price.shift(-1) / price - 1.0)
+    manual_h10 = information_coefficient(sig, price.shift(-10) / price - 1.0)
+    assert result.loc[1] == pytest.approx(manual_h1)
+    assert result.loc[10] == pytest.approx(manual_h10)
+
+
+def test_decay_curve_shows_predictive_power_shrinking_with_horizon():
+    # by construction, the signal only drives the very next day's return --
+    # every later day is independent noise -- so IC magnitude should shrink
+    # sharply and roughly monotonically as the horizon grows.
+    sig, price = _price_path_with_one_day_signal_effect()
+    result = decay_curve(sig, price, horizons=[1, 5, 10, 20])
+    assert abs(result.loc[1]) > abs(result.loc[5]) > abs(result.loc[10]) > abs(result.loc[20])
+    assert abs(result.loc[1]) > 0.7  # strong same-day-effect signal should be clearly detected
+    assert abs(result.loc[20]) < 0.3  # mostly decayed away by 20 days out
+
+
+def test_decay_curve_rank_method_also_shows_decay():
+    sig, price = _price_path_with_one_day_signal_effect()
+    result = decay_curve(sig, price, horizons=[1, 20], method="spearman")
+    assert abs(result.loc[1]) > abs(result.loc[20])
+
+
+def test_decay_curve_rejects_invalid_method():
+    sig, price = _price_path_with_one_day_signal_effect(n=50, extra=10)
+    with pytest.raises(ValueError):
+        decay_curve(sig, price, horizons=[1, 5], method="kendall")
+
+
+def test_decay_curve_rejects_non_positive_horizon():
+    sig, price = _price_path_with_one_day_signal_effect(n=50, extra=10)
+    with pytest.raises(ValueError):
+        decay_curve(sig, price, horizons=[1, 0, 5])
+    with pytest.raises(ValueError):
+        decay_curve(sig, price, horizons=[-3])

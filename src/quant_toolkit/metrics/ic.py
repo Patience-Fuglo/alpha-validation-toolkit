@@ -14,6 +14,8 @@ against those reference implementations independently.
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -105,6 +107,35 @@ def rolling_ic(
         else:
             values.append(scorer(window_slice["signal"], window_slice["forward_return"]))
     return pd.Series(values, index=aligned.index, name=f"rolling_{method}_ic")
+
+
+def decay_curve(
+    signal: pd.Series,
+    prices: pd.Series,
+    horizons: Sequence[int],
+    method: str = "pearson",
+) -> pd.Series:
+    """IC (or Rank IC) of ``signal`` against the forward return realized
+    each of ``horizons`` bars later -- the same starting point in time,
+    only the forward-looking window changes.
+
+    This is a different question from ``rolling_ic``: rolling IC asks
+    "is this signal still good this month vs. six months ago" (calendar
+    time on the x-axis, horizon held fixed). Decay curve asks "how many
+    bars can I wait before acting on one signal reading before it's gone
+    stale" (horizon on the x-axis, calendar window held fixed -- the full
+    aligned sample, at every horizon).
+
+    Returns a Series indexed by ``horizons`` (in the order given).
+    """
+    if method not in ("pearson", "spearman"):
+        raise ValueError("method must be 'pearson' or 'spearman'")
+    if any(h <= 0 for h in horizons):
+        raise ValueError("all horizons must be positive")
+
+    scorer = information_coefficient if method == "pearson" else rank_information_coefficient
+    values = [scorer(signal, prices.shift(-h) / prices - 1.0) for h in horizons]
+    return pd.Series(values, index=list(horizons), name=f"decay_curve_{method}_ic")
 
 
 def icir(ic_series: pd.Series) -> float:

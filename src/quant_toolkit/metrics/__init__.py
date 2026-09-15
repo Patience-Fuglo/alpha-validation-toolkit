@@ -1,5 +1,5 @@
 from .factor_neutralization import OLSResult, fama_french_alpha, ols_regression
-from .ic import icir, information_coefficient, rank_information_coefficient, rolling_ic
+from .ic import decay_curve, icir, information_coefficient, rank_information_coefficient, rolling_ic
 from .psr_dsr import (
     deflated_sharpe_ratio,
     expected_max_sharpe_under_null,
@@ -11,6 +11,7 @@ __all__ = [
     "information_coefficient",
     "rank_information_coefficient",
     "rolling_ic",
+    "decay_curve",
     "icir",
     "sharpe_ratio",
     "probabilistic_sharpe_ratio",

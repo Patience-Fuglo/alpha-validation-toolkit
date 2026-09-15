@@ -23,7 +23,7 @@ correlation — not idealized textbook data.
 | IC / Rank IC | done |
 | PSR / DSR (k=15 multiple-testing correction) | done |
 | Fama-French factor neutralization | done |
-| Rolling IC / decay curve | not started |
+| Rolling IC / decay curve | done |
 
 ## Purged walk-forward with embargo
 
@@ -171,6 +171,45 @@ Run the real-data demo:
 
 ```bash
 python scripts/demo_factor_neutralization.py
+```
+
+## Rolling IC / decay curve
+
+`src/quant_toolkit/metrics/ic.py` (`rolling_ic`, `decay_curve`)
+
+Two different questions about the same signal, both built on the same IC
+machinery, answered along two different axes:
+
+- **Rolling IC** — calendar time on the x-axis, forward horizon held fixed.
+  Is this signal's overall skill holding up this month vs. six months ago,
+  or quietly fading?
+- **Decay curve** — forward horizon on the x-axis, calendar window held
+  fixed (the full sample, at every horizon). Given one signal reading, how
+  many bars can you wait before acting on it before it's gone stale?
+
+A signal's overall skill (rolling IC) and any single reading's shelf life
+(decay curve) are genuinely separate questions — a signal can look
+consistently fine on one axis while a single reading still goes stale
+within days on the other.
+
+```python
+from quant_toolkit.data import load_ohlcv
+from quant_toolkit.metrics import decay_curve, icir, rolling_ic
+
+bars = load_ohlcv("NVDA", "2019-01-01", "2024-12-31")
+signal = bars["close"].pct_change(5)
+forward_return = bars["close"].shift(-5) / bars["close"] - 1.0
+
+roll = rolling_ic(signal, forward_return, window=60)
+icir(roll)
+
+decay_curve(signal, bars["close"], horizons=[1, 5, 10, 20, 40])
+```
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_decay_curve.py
 ```
 
 ## Data
