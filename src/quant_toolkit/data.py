@@ -99,6 +99,79 @@ def _normalize_yfinance(raw: pd.DataFrame) -> pd.DataFrame:
     return df.sort_index()
 
 
+_FAMA_FRENCH_DAILY_URL = (
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
+    "F-F_Research_Data_Factors_daily_CSV.zip"
+)
+_FAMA_FRENCH_COLUMNS = ["mkt_rf", "smb", "hml", "rf"]
+
+
+def load_fama_french_factors(
+    start: str,
+    end: str,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """Load real daily Fama-French 3-factor data (Mkt-RF, SMB, HML, RF) from
+    Kenneth French's public data library, sliced to [start, end].
+
+    Returns a DataFrame indexed by tz-naive ``pd.DatetimeIndex`` with columns
+    ``mkt_rf, smb, hml, rf``, all as decimal daily returns (the source file's
+    percent units, e.g. 0.09 meaning 0.09%, are divided by 100).
+    """
+    cache_path = cache_dir / f"FF3_{start}_{end}.csv"
+    if not force_refresh and cache_path.exists():
+        return _read_ff_cache(cache_path)
+
+    df = _fetch_fama_french()
+    if df is None or df.empty:
+        raise DataUnavailableError("Could not load Fama-French factor data.")
+
+    df = df.loc[start:end]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    df.to_csv(cache_path)
+    print(f"[data] Fama-French 3-factor: {len(df)} rows, cached to {cache_path.name}")
+    return df
+
+
+def _read_ff_cache(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    df.index.name = "date"
+    return df[_FAMA_FRENCH_COLUMNS]
+
+
+def _fetch_fama_french() -> pd.DataFrame | None:
+    import zipfile
+    from io import BytesIO, StringIO
+
+    try:
+        resp = requests.get(_FAMA_FRENCH_DAILY_URL, timeout=15)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+
+    with zipfile.ZipFile(BytesIO(resp.content)) as zf:
+        csv_name = next(n for n in zf.namelist() if n.lower().endswith(".csv"))
+        raw_text = zf.read(csv_name).decode("utf-8")
+
+    lines = raw_text.splitlines()
+    header_idx = next(i for i, line in enumerate(lines) if line.startswith(",Mkt-RF"))
+    data_lines = []
+    for line in lines[header_idx + 1 :]:
+        first_field = line.split(",", 1)[0].strip()
+        if len(first_field) == 8 and first_field.isdigit():
+            data_lines.append(line)
+        elif data_lines:
+            break  # hit the footer after the data block ended
+
+    parsed = pd.read_csv(StringIO("\n".join(data_lines)), header=None)
+    parsed.columns = ["date"] + _FAMA_FRENCH_COLUMNS
+    parsed["date"] = pd.to_datetime(parsed["date"], format="%Y%m%d")
+    parsed = parsed.set_index("date")
+    parsed[_FAMA_FRENCH_COLUMNS] = parsed[_FAMA_FRENCH_COLUMNS].astype(float) / 100.0
+    return parsed.sort_index()
+
+
 def _fetch_stooq(ticker: str, start: str, end: str) -> pd.DataFrame | None:
     url = f"https://stooq.com/q/d/l/?s={ticker.lower()}.us&i=d"
     try:

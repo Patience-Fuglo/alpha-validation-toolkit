@@ -22,7 +22,7 @@ correlation — not idealized textbook data.
 | Purged walk-forward with embargo | done |
 | IC / Rank IC | done |
 | PSR / DSR (k=15 multiple-testing correction) | done |
-| Fama-French factor neutralization | not started |
+| Fama-French factor neutralization | done |
 | Rolling IC / decay curve | not started |
 
 ## Purged walk-forward with embargo
@@ -133,6 +133,44 @@ Run the real-data demo:
 
 ```bash
 python scripts/demo_psr_dsr.py
+```
+
+## Factor neutralization
+
+`src/quant_toolkit/metrics/factor_neutralization.py`
+
+Regresses a return stream against known, well-documented factors (market,
+size, value) to separate what those factors already explain from what's
+genuinely left over. A strategy with near-zero factor betas, near-zero
+R-squared, and a real, statistically significant alpha has independent
+edge. A strategy with a high beta and high R-squared on a known factor,
+with no significant alpha once that's subtracted out, was never really its
+own thing — it was that factor, relabeled.
+
+OLS is solved via `numpy.linalg.lstsq` (a numerically stable solver for the
+normal equations) rather than `statsmodels.OLS` — the design matrix,
+residuals, R-squared, coefficient standard errors and t-statistics are all
+computed explicitly. Cross-checked against `sklearn.LinearRegression` in
+the tests.
+
+```python
+from quant_toolkit.data import load_fama_french_factors, load_ohlcv
+from quant_toolkit.metrics import fama_french_alpha
+
+factors = load_fama_french_factors("2019-01-01", "2024-12-31")
+returns = load_ohlcv("NVDA", "2019-01-01", "2024-12-31")["close"].pct_change().dropna()
+
+result = fama_french_alpha(returns, factors)
+result.alpha, result.betas, result.r_squared, result.is_significant("alpha")
+```
+
+Factor data is real, official Fama-French daily 3-factor data from
+Kenneth French's public data library — not a synthetic or proxied series.
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_factor_neutralization.py
 ```
 
 ## Data
