@@ -58,6 +58,13 @@ pip install -e .
 python scripts/demo_purged_walk_forward.py
 ```
 
+For a byte-reproducible install (the exact dependency versions this
+repo was actually tested against -- see `constraints.txt`):
+
+```bash
+pip install -e ".[dev]" -c constraints.txt
+```
+
 Run the tests:
 
 ```bash

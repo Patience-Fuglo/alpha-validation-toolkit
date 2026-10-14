@@ -6,13 +6,25 @@ build-backend = "setuptools.build_meta"
 name = "alpha-validation-toolkit"
 version = "0.1.0"
 description = "From-scratch reimplementation of core quant research validation tooling: purged walk-forward with embargo, IC/Rank IC, PSR/DSR, factor neutralization, rolling IC/decay."
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.13"
 dependencies = [
-    "pandas>=2.0",
-    "numpy>=1.23",
-    "yfinance>=0.2.55",
-    "requests>=2.32",
+    "pandas>=2.0,<4.0",
+    "numpy>=1.23,<3.0",
+    "yfinance>=0.2.55,<2.0",
+    "requests>=2.32,<3.0",
 ]
+
+# scipy and scikit-learn are real, previously UNDECLARED test-only
+# dependencies: the real implementation (src/) never uses either
+# (this toolkit's own from-scratch convention), but
+# tests/test_psr_dsr.py, tests/test_ic.py (scipy.stats), and
+# tests/test_factor_neutralization.py (sklearn.linear_model) import
+# them directly as independent cross-check references. They only
+# worked before by accident -- whatever environment this repo was
+# last tested in happened to already have both installed. Found and
+# fixed during a portfolio-wide dependency reproducibility audit.
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "scipy>=1.10,<2.0", "scikit-learn>=1.3,<2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
